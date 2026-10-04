@@ -1,5 +1,6 @@
 import {GameState} from "./game_state.mjs"
 import {FlashToast} from "./flash_toast.js"
+import {getPlayerId, setPlayerId} from "./player_store.js"
 // If you want to use Phoenix channels, run `mix help phx.gen.channel`
 // to get started and then uncomment the line below.
 // import "./user_socket.js"
@@ -27,10 +28,19 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/skipboi"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+const roomId = window.location.pathname.match(/\/lobby\/(.+)/)?.[1]
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken},
+  params: {_csrf_token: csrfToken, player_id: roomId ? getPlayerId(roomId) : null},
   hooks: {...colocatedHooks, GameState, FlashToast},
+})
+
+window.addEventListener("phx:clipboard", (e) => {
+  navigator.clipboard.writeText(e.detail.text)
+})
+
+window.addEventListener("phx:store_player", (e) => {
+  setPlayerId(e.detail.room_id, e.detail.player_id)
 })
 
 // connect if there are any LiveViews on the page

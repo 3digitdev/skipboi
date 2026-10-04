@@ -31,13 +31,18 @@ defmodule SkipboiWeb.HomeLive do
         <p class="italic mt-0">Games last up to 24 hours and are deleted when ended.</p>
         <div class="flex flex-col gap-2 w-fit">
           <div>
-            <.skeubutton id="create-game" phx-click="create">Create game</.skeubutton>
+            <.button id="create-game" phx-click="create" text="Create game" />
           </div>
           <p class="mt-1 mb-0">Or, join someone else's game with their game link:</p>
           <div>
-            <.form for={to_form(%{"join-id" => ""})} id="join-form" phx-submit="join_game">
+            <.form
+              class="flex gap-2"
+              for={to_form(%{"join-id" => ""})}
+              id="join-form"
+              phx-submit="join_game"
+            >
               <.input id="join-id" name="join-id" placeholder="Enter game link" width="16" />
-              <.button type="submit" id="join-game">Join game</.button>
+              <.button type="submit" id="join-game" text="Join game" />
             </.form>
           </div>
         </div>
@@ -53,11 +58,11 @@ defmodule SkipboiWeb.HomeLive do
       |> Enum.reduce_while(nil, fn _, _ ->
         case Games.create() do
           {:error, :conflict} -> {:cont, nil}
-          id -> {:halt, id}
+          game_id -> {:halt, game_id}
         end
       end)
 
-    {:noreply, push_navigate(socket, to: ~p"/games/#{id}")}
+    {:noreply, push_navigate(socket, to: ~p"/lobby/#{id}")}
   end
 
   def handle_event("join_game", %{"join-id" => id}, socket) do

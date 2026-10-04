@@ -6,6 +6,8 @@ defmodule Skipboi.Games do
   """
   use GenServer
 
+  alias Skipboi.Game
+
   @ttl :timer.hours(24)
   @max_bytes 65_536
 
@@ -27,12 +29,11 @@ defmodule Skipboi.Games do
     if Map.has_key?(rooms, id) do
       {:reply, {:error, :conflict}, rooms}
     else
-      # id = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
       expires_at = System.monotonic_time(:millisecond) + @ttl
       timer = Process.send_after(self(), {:expire, id}, @ttl)
 
       room = %{
-        state: %{"score" => 0, "started" => false},
+        state: Game.new_game(),
         revision: 0,
         expires_at: expires_at,
         timer: timer
@@ -49,7 +50,6 @@ defmodule Skipboi.Games do
 
   def handle_call({:publish, id, revision, json}, _from, rooms) do
     {room, rooms} = lookup(rooms, id)
-    IO.puts("Publishing #{inspect(json)}")
 
     with {:ok, current} <- snapshot(room),
          true <- revision == current.revision,
@@ -99,7 +99,7 @@ defmodule Skipboi.Games do
   end
 
   defp decode(json) when is_binary(json) and byte_size(json) <= @max_bytes do
-    case Jason.decode(json) do
+    case Jason.decode(json, keys: :atoms) do
       {:ok, state} when is_map(state) -> {:ok, state}
       _ -> {:error, :invalid_state}
     end

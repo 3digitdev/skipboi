@@ -22,19 +22,9 @@ defmodule SkipboiWeb.Layouts do
         aria-atomic="true"
         class={[
           "pointer-events-auto box-border flex w-full max-w-sm items-center gap-3 rounded-lg border border-solid bg-white p-4 text-slate-900 shadow-lg",
-          if(kind == :error, do: "border-red-300", else: "border-green-300")
+          "border-black"
         ]}
       >
-        <Heroicons.exclamation_circle
-          :if={kind == :error}
-          class="size-5 shrink-0 text-red-600"
-          aria-hidden="true"
-        />
-        <Heroicons.check_circle
-          :if={kind == :info}
-          class="size-5 shrink-0 text-green-600"
-          aria-hidden="true"
-        />
         <p class="m-0 min-w-0 flex-1 text-sm leading-6 wrap-anywhere">
           {Phoenix.Flash.get(@flash, kind)}
         </p>
@@ -43,7 +33,7 @@ defmodule SkipboiWeb.Layouts do
           phx-click="lv:clear-flash"
           phx-value-key={kind}
           aria-label="Dismiss message"
-          class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-red-500 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600"
+          class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-black hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-black"
         >
           <Heroicons.x_mark aria-hidden="true" class="size-5" />
         </button>

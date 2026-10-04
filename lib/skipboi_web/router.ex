@@ -18,6 +18,7 @@ defmodule SkipboiWeb.Router do
     pipe_through :browser
 
     live "/", HomeLive, :home
+    live "/lobby/:id", LobbyLive, :lobby
     live "/games/:id", GameLive, :game
   end
 
