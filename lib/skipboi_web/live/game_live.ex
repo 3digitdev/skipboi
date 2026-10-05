@@ -173,7 +173,7 @@ defmodule SkipboiWeb.GameLive do
         <% else %>
           <%!-- Mobile layout --%>
           <main class="flex flex-col items-center gap-4 p-4 pb-16">
-            <div class="flex rounded-full overflow-hidden my-4">
+            <div class="flex rounded-full overflow-hidden mb-4 mt-2">
               <button
                 :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
                 type="button"
@@ -217,7 +217,7 @@ defmodule SkipboiWeb.GameLive do
           </main>
 
           <%!-- Mobile opponent tray --%>
-          <div class="fixed bottom-0 left-0 right-0 z-50">
+          <div class="fixed bottom-0 left-0 right-0 z-50 pb-[env(safe-area-inset-bottom)] bg-slate-800">
             <button
               class="w-full bg-slate-800 text-white text-sm py-2 flex items-center justify-center gap-1"
               phx-click="toggle_tray"
@@ -522,7 +522,7 @@ defmodule SkipboiWeb.GameLive do
       |> assign(
         :num_pos_class,
         if(assigns.under,
-          do: "text-[12px]",
+          do: "text-[12px] font-bold",
           else: "text-2xl font-bold items-center justify-center"
         )
       )
@@ -696,10 +696,26 @@ defmodule SkipboiWeb.GameLive do
       if socket.assigns.player_id,
         do: snapshot.state.players[socket.assigns.player_id]
 
+    was_my_turn = socket.assigns.state.current_player == socket.assigns.player_id
+    is_my_turn = snapshot.state.current_player == socket.assigns.player_id
+
+    tray_open =
+      cond do
+        not socket.assigns.mobile -> socket.assigns.tray_open
+        is_my_turn -> false
+        was_my_turn && not is_my_turn -> true
+        true -> socket.assigns.tray_open
+      end
+
     {:noreply,
      socket
      |> assign(snapshot)
-     |> assign(player: player, selected_card: nil, expanded_stack: nil)
+     |> assign(
+       player: player,
+       selected_card: nil,
+       expanded_stack: nil,
+       tray_open: tray_open
+     )
      |> compute_other_players()}
   end
 

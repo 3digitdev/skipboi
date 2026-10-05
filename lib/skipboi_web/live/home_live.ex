@@ -25,26 +25,12 @@ defmodule SkipboiWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <main class="flex flex-col items-center m-4">
+      <main class="flex flex-col items-center m-4 text-center">
         <h1 class="mb-0">Start a game of Skip-Bo</h1>
         <p class="italic mb-0">No account needed!</p>
         <p class="italic mt-0">Games last up to 24 hours and are deleted when ended.</p>
         <div class="flex flex-col gap-2 w-fit items-center">
-          <div>
-            <.button id="create-game" phx-click="create" text="Create game" />
-          </div>
-          <p class="mt-1 mb-0">Or, join someone else's game with their game link:</p>
-          <div>
-            <.form
-              class="flex gap-2"
-              for={to_form(%{"join-id" => ""})}
-              id="join-form"
-              phx-submit="join_game"
-            >
-              <.input id="join-id" name="join-id" placeholder="Enter game link" width="16" />
-              <.button type="submit" id="join-game" text="Join game" />
-            </.form>
-          </div>
+          <.button id="create-game" phx-click="create" text="Create game" />
         </div>
       </main>
     </Layouts.app>
@@ -63,16 +49,6 @@ defmodule SkipboiWeb.HomeLive do
       end)
 
     {:noreply, push_navigate(socket, to: ~p"/lobby/#{id}")}
-  end
-
-  def handle_event("join_game", %{"join-id" => id}, socket) do
-    id = Regex.run(~r/\/games\/([^\/]*)/, id, capture: :all_but_first) |> List.first() || id
-
-    {:noreply,
-     case Games.get(id) do
-       {:ok, _} -> push_navigate(socket, to: ~p"/games/#{id}")
-       {:error, _} -> unavailable(socket)
-     end}
   end
 
   defp unavailable(socket),

@@ -74,10 +74,31 @@ defmodule SkipboiWeb.LobbyLive do
         <main class="flex flex-col items-center gap-2 m-4">
           <h1 class="mb-0">Game Lobby</h1>
           <span>Invite players with this link:</span>
-          <span>{url(~p"/lobby/#{@room_id}")}</span>
-          <.button id="copy-link" class="w-fit gap-1" phx-click="copy_link" text="Copy Link">
-            <Heroicons.document_duplicate aria-hidden="true" class="size-5" />
-          </.button>
+          <span class="text-sm break-all text-center">{url(~p"/lobby/#{@room_id}")}</span>
+          <div class="flex gap-2">
+            <.button id="copy-link" class="w-fit gap-1" phx-click="copy_link" text="Copy Link" />
+            <div id="share-link" phx-hook=".ShareLink" phx-update="ignore"
+              data-url={url(~p"/lobby/#{@room_id}")} data-title="Join my Skip-Bo game!">
+            </div>
+          </div>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".ShareLink">
+            export default {
+              mounted() {
+                if (navigator.share) {
+                  const btn = document.createElement("button")
+                  btn.className = "h-8 rounded-sm bg-amber-500 text-amber-900 font-bold px-3 cursor-pointer text-lg [box-shadow:inset_0_2px_0_rgba(255,255,255,0.35),inset_0_-2px_0_rgba(0,0,0,0.15)] [text-shadow:0_-1px_0_rgba(0,0,0,0.3),0_1px_0_rgba(255,255,255,0.2)] active:translate-y-0.5 active:[box-shadow:inset_0_2px_0_rgba(255,255,255,0.35),inset_0_-2px_0_rgba(0,0,0,0.15)]"
+                  btn.textContent = "Share"
+                  btn.addEventListener("click", () => {
+                    navigator.share({
+                      title: this.el.dataset.title,
+                      url: this.el.dataset.url
+                    })
+                  })
+                  this.el.appendChild(btn)
+                }
+              }
+            }
+          </script>
           <p class="mb-0 font-bold">Players:</p>
           <div class="flex flex-col gap-2 ml-2 mb-4 mt-2">
             <span :for={{player_id, player} <- @state[:players]} class="flex gap-1 items-center">
@@ -143,19 +164,6 @@ defmodule SkipboiWeb.LobbyLive do
 
   def handle_info(:game_ended, socket) do
     {:noreply, unavailable(socket)}
-  end
-
-  @impl Phoenix.LiveView
-  def terminate(_reason, socket) do
-    %{room_id: room_id, player_id: player_id} = socket.assigns
-
-    if room_id && player_id do
-      with {:ok, %{state: state, revision: revision}} <- Games.get(room_id),
-           false <- state[:started] do
-        new_state = Skipboi.Game.remove_player(state, player_id)
-        Games.publish(room_id, revision, new_state)
-      end
-    end
   end
 
   defp update_game(socket, revision, state) do

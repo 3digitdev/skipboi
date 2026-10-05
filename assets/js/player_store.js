@@ -2,14 +2,14 @@ const KEY = "skipboi_players"
 
 function getAll() {
   try {
-    return JSON.parse(sessionStorage.getItem(KEY)) || {}
+    return JSON.parse(localStorage.getItem(KEY)) || {}
   } catch {
     return {}
   }
 }
 
 function save(store) {
-  sessionStorage.setItem(KEY, JSON.stringify(store))
+  localStorage.setItem(KEY, JSON.stringify(store))
 }
 
 export function getPlayerId(roomId) {
