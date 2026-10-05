@@ -1,124 +1,12 @@
 defmodule SkipboiWeb.GameLive do
   use SkipboiWeb, :live_view
 
-  alias Skipboi.Card
   alias Skipboi.Game
   alias Skipboi.Games
   alias Skipboi.Player
 
-  # ============================================================
-  # DEBUG: fake game state for UI development. Access via ?debug
-  # Remove this mount clause when no longer needed.
-  # ============================================================
   @impl Phoenix.LiveView
-  def mount(%{"id" => "debug"}, _session, socket), do: mount_debug(socket)
   def mount(params, session, socket), do: mount_real(params, session, socket)
-
-  # ============================================================
-  # DEBUG: fake game state for UI development. Access via ?debug
-  # Remove this function when no longer needed.
-  # ============================================================
-  defp c(val, type \\ :number), do: %Card{value: val, type: type}
-
-  defp mount_debug(socket) do
-    player1 = %Player{
-      id: "DebugAlice",
-      hand: [c(3), c(7), c(nil, :skipbo), c(11), c(1)],
-      # stock: [c(5), c(9), c(2), c(12), c(4), c(8), c(6), c(10), c(3), c(1)],
-      stock: [c(5)],
-      discards: {
-        [c(4), c(2)],
-        [c(9)],
-        [],
-        [c(6), c(nil, :skipbo), c(3)]
-      }
-    }
-
-    player2 = %Player{
-      id: "DebugBob",
-      hand: [c(2), c(5), c(8)],
-      stock: [c(7), c(11), c(1), c(6), c(3), c(12), c(9), c(2), c(8), c(5), c(4), c(10)],
-      discards: {
-        [c(7)],
-        [],
-        [c(11), c(3)],
-        [c(1)]
-      }
-    }
-
-    player3 = %Player{
-      id: "DebugBill",
-      hand: [c(2), c(5), c(8)],
-      stock: [c(7), c(11), c(1), c(6), c(3), c(12), c(9), c(2), c(8), c(5), c(4), c(10)],
-      discards: {
-        [c(7)],
-        [],
-        [c(11), c(3)],
-        [c(1)]
-      }
-    }
-
-    player4 = %Player{
-      id: "DebugBen",
-      hand: [c(2), c(5), c(8)],
-      stock: [c(7), c(11), c(1), c(6), c(3), c(12), c(9), c(2), c(8), c(5), c(4), c(10)],
-      discards: {
-        [c(7)],
-        [],
-        [c(11), c(3)],
-        [c(1)]
-      }
-    }
-
-    state = %{
-      deck: Enum.map(1..80, fn v -> c(rem(v - 1, 12) + 1) end) |> Enum.shuffle(),
-      players: %{
-        "DebugAlice" => player1,
-        "DebugBob" => player2,
-        "DebugBill" => player3,
-        "DebugBen" => player4
-      },
-      player_order: ["DebugAlice", "DebugBob", "DebugBill", "DebugBen"],
-      current_player: "DebugAlice",
-      started: true,
-      room_id: "debug",
-      host_id: "DebugAlice",
-      discards: [],
-      winner: nil,
-      stacks: {
-        [c(1), c(2), c(3)],
-        [c(1, :skipbo), c(2)],
-        [],
-        []
-      }
-    }
-
-    if connected?(socket), do: Games.subscribe("debug")
-
-    {:ok,
-     socket
-     |> assign(
-       page_title: "Skipboi (Debug)",
-       room_id: "debug",
-       state: state,
-       revision: 0,
-       player_id: "DebugAlice",
-       player: player1,
-       expanded_stack: nil,
-       selected_card: nil,
-       tray_open: false,
-       mobile:
-         if(connected?(socket),
-           do: (get_connect_params(socket)["viewport_width"] || 1024) < 768,
-           else: false
-         )
-     )
-     |> compute_other_players()}
-  end
-
-  # ============================================================
-  # END DEBUG
-  # ============================================================
 
   defp mount_real(%{"id" => id}, _session, socket) do
     case Games.get(id) do
@@ -175,23 +63,12 @@ defmodule SkipboiWeb.GameLive do
       )
     end
 
-    if socket.assigns.room_id == "debug" do
-      socket
-      |> assign(
-        state: new_state,
-        player: new_state.players[socket.assigns.player_id],
-        selected_card: nil,
-        expanded_stack: nil
-      )
-      |> compute_other_players()
-    else
-      case Games.publish(socket.assigns.room_id, socket.assigns.revision, new_state) do
-        {:ok, _snapshot} ->
-          assign(socket, selected_card: nil, expanded_stack: nil)
+    case Games.publish(socket.assigns.room_id, socket.assigns.revision, new_state) do
+      {:ok, _snapshot} ->
+        assign(socket, selected_card: nil, expanded_stack: nil)
 
-        {:error, :conflict} ->
-          put_flash(socket, :error, "Another player moved first, try again.")
-      end
+      {:error, :conflict} ->
+        put_flash(socket, :error, "Another player moved first, try again.")
     end
   end
 
