@@ -25,11 +25,11 @@ defmodule SkipboiWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <main>
+      <main class="flex flex-col items-center m-4">
         <h1 class="mb-0">Start a game of Skip-Bo</h1>
         <p class="italic mb-0">No account needed!</p>
         <p class="italic mt-0">Games last up to 24 hours and are deleted when ended.</p>
-        <div class="flex flex-col gap-2 w-fit">
+        <div class="flex flex-col gap-2 w-fit items-center">
           <div>
             <.button id="create-game" phx-click="create" text="Create game" />
           </div>

@@ -71,15 +71,13 @@ defmodule SkipboiWeb.LobbyLive do
           <.button id="go-home" phx-click="go_home" text="Back to home" />
         </main>
       <% else %>
-        <main>
+        <main class="flex flex-col items-center gap-2 m-4">
           <h1 class="mb-0">Game Lobby</h1>
           <span>Invite players with this link:</span>
-          <div class="flex gap-4 items-center">
-            <span>{url(~p"/lobby/#{@room_id}")}</span>
-            <.button id="copy-link" class="w-fit gap-1" phx-click="copy_link" text="Copy Link">
-              <Heroicons.document_duplicate aria-hidden="true" class="size-5" />
-            </.button>
-          </div>
+          <span>{url(~p"/lobby/#{@room_id}")}</span>
+          <.button id="copy-link" class="w-fit gap-1" phx-click="copy_link" text="Copy Link">
+            <Heroicons.document_duplicate aria-hidden="true" class="size-5" />
+          </.button>
           <p class="mb-0 font-bold">Players:</p>
           <div class="flex flex-col gap-2 ml-2 mb-4 mt-2">
             <span :for={{player_id, player} <- @state[:players]} class="flex gap-1 items-center">
@@ -87,12 +85,20 @@ defmodule SkipboiWeb.LobbyLive do
               {player_id}
             </span>
           </div>
-          <%= if map_size(@state[:players] || %{}) < 2 do %>
-            <span class="border border-gray-400 rounded px-3 py-1 text-gray-500">Waiting for players...</span>
-          <% else %>
-            <.button id="start-game" phx-click="start_game" text="Start game">
-              <Heroicons.arrow_right_circle aria-hidden="true" class="size-5" />
-            </.button>
+          <%= cond do %>
+            <% map_size(@state[:players] || %{}) < 2 -> %>
+              <span class="border border-gray-400 rounded px-3 py-1 text-gray-500">Waiting for players...</span>
+            <% @state.host_id != @player_id -> %>
+              <span class="border border-gray-400 rounded px-3 py-1 text-gray-500">Waiting for host to start...</span>
+            <% true -> %>
+              <.button
+                id="start-game"
+                phx-click="start_game"
+                text="Start game"
+                disabled={@state.host_id != @player_id}
+              >
+                <Heroicons.arrow_right_circle aria-hidden="true" class="size-5" />
+              </.button>
           <% end %>
         </main>
       <% end %>
