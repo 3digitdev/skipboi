@@ -263,20 +263,28 @@ defmodule SkipboiWeb.GameLive do
             selected_card={@selected_card}
             expanded_stack={@expanded_stack}
           />
-          <div class="flex gap-2 mt-4">
-            <.button
+          <div class="flex rounded-full overflow-hidden mt-8">
+            <button
               :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
               type="button"
               phx-click="react"
               phx-value-reaction={emoji}
-              class="text-2xl cursor-pointer"
-              text={emoji}
-            />
+              class="text-3xl hover:scale-125 transition-transform cursor-pointer bg-amber-300/30 py-2 px-3 border-y-0 border-r-0 first:border-l-0 outline-none hover:bg-amber-300 active:bg-amber-300"
+            >{emoji}</button>
           </div>
         </main>
       <% else %>
         <%!-- Mobile layout --%>
         <main class="flex flex-col items-center gap-4 p-4 pb-16">
+          <div class="flex rounded-full overflow-hidden my-4">
+            <button
+              :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
+              type="button"
+              phx-click="react"
+              phx-value-reaction={emoji}
+              class="text-3xl hover:scale-125 transition-transform cursor-pointer bg-amber-300/30 py-2 px-3 border-y-0 border-r-0 first:border-l-0 outline-none hover:bg-amber-300 active:bg-amber-300"
+            >{emoji}</button>
+          </div>
           <%= if @state.winner do %>
             <div class="flex flex-col gap-2 items-center bg-amber-300/50 p-2 mt-8 rounded-md">
               <h1 class="mb-0 mt-0">🥇WINNER🥇</h1>
@@ -307,16 +315,6 @@ defmodule SkipboiWeb.GameLive do
               player_id={@player_id}
               selected_card={@selected_card}
               game_over={not is_nil(@state.winner)}
-            />
-          </div>
-          <div class="flex gap-3">
-            <.button
-              :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
-              type="button"
-              phx-click="react"
-              phx-value-reaction={emoji}
-              class="text-2xl cursor-pointer"
-              text={emoji}
             />
           </div>
         </main>
