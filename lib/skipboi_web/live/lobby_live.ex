@@ -106,7 +106,7 @@ defmodule SkipboiWeb.LobbyLive do
 
     case update_game(socket, socket.assigns.revision, new_state) do
       {:ok, _snapshot} ->
-        {:noreply, push_navigate(socket, to: ~p"/games/#{socket.assigns.room_id}")}
+        {:noreply, redirect(socket, to: ~p"/games/#{socket.assigns.room_id}")}
 
       {:error, _} ->
         {:noreply, unavailable(socket)}

@@ -167,6 +167,14 @@ defmodule SkipboiWeb.GameLive do
   end
 
   defp publish_or_apply(socket, new_state) do
+    if new_state.current_player != socket.assigns.state.current_player do
+      Phoenix.PubSub.broadcast(
+        Skipboi.PubSub,
+        Games.topic(socket.assigns.room_id),
+        {:notify, new_state.current_player}
+      )
+    end
+
     if socket.assigns.room_id == "debug" do
       socket
       |> assign(
@@ -201,48 +209,150 @@ defmodule SkipboiWeb.GameLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="bg-cyan-500 text-white text-center text-sm font-bold py-1 -mx-2 -mt-2">
-        {@state.current_player}'s turn
-      </div>
-      <div
-        id="reaction-feed"
-        phx-hook=".ReactionFeed"
-        phx-update="ignore"
-        class="fixed top-12 left-3 z-50 flex flex-col gap-1 pointer-events-none"
-      >
-      </div>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".ReactionFeed">
-        export default {
-          mounted() {
-            this.handleEvent("reaction", ({player, emoji}) => {
-              const el = document.createElement("div")
-              el.style.cssText = "display:flex;align-items:center;gap:6px;background:rgba(30,41,59,0.85);color:white;font-size:14px;padding:6px 12px;border-radius:9999px;width:fit-content;backdrop-filter:blur(4px);opacity:1;transition:opacity 0.5s ease-out"
-              el.innerHTML = `<span style="font-size:20px">${emoji}</span><span style="font-weight:500">${player}</span>`
-              this.el.appendChild(el)
-              setTimeout(() => { el.style.opacity = "0" }, 2500)
-              setTimeout(() => el.remove(), 3000)
-            })
+      <%= if is_nil(@player) do %>
+        <div class="flex items-center justify-center mt-12 text-lg">Loading game...</div>
+      <% else %>
+        <div class="bg-cyan-500 text-white text-center text-sm font-bold py-1 -mx-2 -mt-2">
+          {if(@state.current_player == @player_id, do: "Your", else: "#{@state.current_player}'s")} turn
+        </div>
+        <div
+          id="reaction-feed"
+          phx-hook=".ReactionFeed"
+          phx-update="ignore"
+          class="fixed top-12 left-3 z-50 flex flex-col gap-1 pointer-events-none"
+        >
+        </div>
+        <script :type={Phoenix.LiveView.ColocatedHook} name=".ReactionFeed">
+          export default {
+            mounted() {
+              this.handleEvent("reaction", ({player, emoji}) => {
+                const el = document.createElement("div")
+                el.style.cssText = "display:flex;align-items:center;gap:6px;background:rgba(30,41,59,0.85);color:white;font-size:14px;padding:6px 12px;border-radius:9999px;width:fit-content;backdrop-filter:blur(4px);opacity:1;transition:opacity 0.5s ease-out"
+                el.innerHTML = `<span style="font-size:20px">${emoji}</span><span style="font-weight:500">${player}</span>`
+                this.el.appendChild(el)
+                setTimeout(() => { el.style.opacity = "0" }, 2500)
+                setTimeout(() => el.remove(), 3000)
+              })
+              this.handleEvent("notify", ({player}) => {
+                const el = document.createElement("div")
+                el.style.cssText = "display:flex;align-items:center;gap:6px;background:rgba(0,184,219,0.85);color:white;font-size:14px;padding:6px 12px;border-radius:9999px;width:fit-content;backdrop-filter:blur(4px);opacity:1;transition:opacity 0.5s ease-out"
+                el.innerHTML = `<span style="font-size:20px">‼️</span><span style="font-weight:500">Your turn, ${player}!</span>`
+                this.el.appendChild(el)
+                setTimeout(() => { el.style.opacity = "0" }, 2500)
+                setTimeout(() => el.remove(), 3000)
+
+              })
+            }
           }
-        }
-      </script>
-      <%= if not @mobile do %>
-        <main class="flex m-4 w-full flex-col items-center">
-          <div class="flex justify-around gap-4 lg:justify-normal lg:gap-20 lg:ml-10 items-center mb-8">
-            <div class="flex flex-col gap-2 content-center items-center">
-              <%= if @state.winner do %>
-                <span class="flex flex-col items-center gap-2">
-                  <div class="flex flex-col gap-2 items-center bg-amber-500/50 p-2 mt-8 rounded-md">
-                    <h1 class="mb-0 mt-0">🥇WINNER🥇</h1>
-                    <h2 class="mb-0 mt-0">{@state.winner}</h2>
-                  </div>
-                  <.button text="Rematch!" type="button" phx-click="rematch" />
-                </span>
-              <% else %>
-                <.render_stacks state={@state} selected_card={@selected_card} />
-              <% end %>
+        </script>
+        <%= if not @mobile do %>
+          <main class="flex m-4 w-full flex-col items-center">
+            <div class="flex justify-around gap-4 lg:justify-normal lg:gap-20 lg:ml-10 items-center mb-8">
+              <div class="flex flex-col gap-2 content-center items-center">
+                <%= if @state.winner do %>
+                  <span class="flex flex-col items-center gap-2">
+                    <div class="flex flex-col gap-2 items-center bg-amber-500/50 p-2 mt-8 rounded-md">
+                      <h1 class="mb-0 mt-0">🥇WINNER🥇</h1>
+                      <h2 class="mb-0 mt-0">{@state.winner}</h2>
+                    </div>
+                    <.button text="Rematch!" type="button" phx-click="rematch" />
+                  </span>
+                <% else %>
+                  <.render_stacks state={@state} selected_card={@selected_card} />
+                <% end %>
+              </div>
+              <.section text="Opponents" side="left">
+                <div class="flex flex-col gap-4">
+                  <.render_player
+                    :for={{id, player} <- @other_players}
+                    state={@state}
+                    id={id}
+                    player={player}
+                    player_id={@player_id}
+                    selected_card={@selected_card}
+                    expanded_stack={@expanded_stack}
+                  />
+                </div>
+              </.section>
             </div>
-            <.section text="Opponents" side="left">
-              <div class="flex flex-col gap-4">
+            <.render_player
+              state={@state}
+              id={@player_id}
+              player={@player}
+              player_id={@player_id}
+              selected_card={@selected_card}
+              expanded_stack={@expanded_stack}
+            />
+            <div class="flex rounded-full overflow-hidden mt-8">
+              <button
+                :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
+                type="button"
+                phx-click="react"
+                phx-value-reaction={emoji}
+                class="text-3xl hover:scale-125 transition-transform cursor-pointer bg-amber-300/30 py-2 px-3 border-y-0 border-r-0 first:border-l-0 outline-none hover:bg-amber-300 active:bg-amber-300"
+              >{emoji}</button>
+            </div>
+          </main>
+        <% else %>
+          <%!-- Mobile layout --%>
+          <main class="flex flex-col items-center gap-4 p-4 pb-16">
+            <div class="flex rounded-full overflow-hidden my-4">
+              <button
+                :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
+                type="button"
+                phx-click="react"
+                phx-value-reaction={emoji}
+                class="text-3xl hover:scale-125 transition-transform cursor-pointer bg-amber-300/30 py-2 px-3 border-y-0 border-r-0 first:border-l-0 outline-none hover:bg-amber-300 active:bg-amber-300"
+              >{emoji}</button>
+            </div>
+            <%= if @state.winner do %>
+              <div class="flex flex-col gap-2 items-center bg-amber-300/50 p-2 mt-8 rounded-md">
+                <h1 class="mb-0 mt-0">🥇WINNER🥇</h1>
+                <h2 class="mb-0 mt-0">{@state.winner}</h2>
+              </div>
+              <.button text="Rematch!" type="button" phx-click="rematch" />
+            <% else %>
+              <.render_stacks state={@state} selected_card={@selected_card} />
+            <% end %>
+            <% my_turn = @state.current_player == @player_id %>
+            <.render_hand
+              hand={@player.hand}
+              my_turn={my_turn}
+              selected_card={@selected_card}
+              my_hand={true}
+              game_over={not is_nil(@state.winner)}
+            />
+            <div class="flex gap-2 items-start">
+              <.render_stock
+                stock={@player.stock}
+                my_turn={my_turn}
+                selected_card={@selected_card}
+                game_over={not is_nil(@state.winner)}
+              />
+              <.render_discards
+                discards={@player.discards}
+                expanded_stack={@expanded_stack}
+                player_id={@player_id}
+                selected_card={@selected_card}
+                game_over={not is_nil(@state.winner)}
+              />
+            </div>
+          </main>
+
+          <%!-- Mobile opponent tray --%>
+          <div class="fixed bottom-0 left-0 right-0 z-50">
+            <button
+              class="w-full bg-slate-800 text-white text-sm py-2 flex items-center justify-center gap-1"
+              phx-click="toggle_tray"
+            >
+              <span>Opponents ({length(@other_players)})</span>
+              <span class={["transition-transform", @tray_open && "rotate-180"]}>&#9650;</span>
+            </button>
+            <div class={[
+              "bg-white overflow-y-auto transition-all duration-200 ease-in-out",
+              if(@tray_open, do: "max-h-[50vh] h-auto", else: "h-0")
+            ]}>
+              <div class="flex flex-col gap-6 p-4 items-center">
                 <.render_player
                   :for={{id, player} <- @other_players}
                   state={@state}
@@ -251,101 +361,12 @@ defmodule SkipboiWeb.GameLive do
                   player_id={@player_id}
                   selected_card={@selected_card}
                   expanded_stack={@expanded_stack}
+                  vertical
                 />
               </div>
-            </.section>
-          </div>
-          <.render_player
-            state={@state}
-            id={@player_id}
-            player={@player}
-            player_id={@player_id}
-            selected_card={@selected_card}
-            expanded_stack={@expanded_stack}
-          />
-          <div class="flex rounded-full overflow-hidden mt-8">
-            <button
-              :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
-              type="button"
-              phx-click="react"
-              phx-value-reaction={emoji}
-              class="text-3xl hover:scale-125 transition-transform cursor-pointer bg-amber-300/30 py-2 px-3 border-y-0 border-r-0 first:border-l-0 outline-none hover:bg-amber-300 active:bg-amber-300"
-            >{emoji}</button>
-          </div>
-        </main>
-      <% else %>
-        <%!-- Mobile layout --%>
-        <main class="flex flex-col items-center gap-4 p-4 pb-16">
-          <div class="flex rounded-full overflow-hidden my-4">
-            <button
-              :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
-              type="button"
-              phx-click="react"
-              phx-value-reaction={emoji}
-              class="text-3xl hover:scale-125 transition-transform cursor-pointer bg-amber-300/30 py-2 px-3 border-y-0 border-r-0 first:border-l-0 outline-none hover:bg-amber-300 active:bg-amber-300"
-            >{emoji}</button>
-          </div>
-          <%= if @state.winner do %>
-            <div class="flex flex-col gap-2 items-center bg-amber-300/50 p-2 mt-8 rounded-md">
-              <h1 class="mb-0 mt-0">🥇WINNER🥇</h1>
-              <h2 class="mb-0 mt-0">{@state.winner}</h2>
-            </div>
-            <.button text="Rematch!" type="button" phx-click="rematch" />
-          <% else %>
-            <.render_stacks state={@state} selected_card={@selected_card} />
-          <% end %>
-          <% my_turn = @state.current_player == @player_id %>
-          <.render_hand
-            hand={@player.hand}
-            my_turn={my_turn}
-            selected_card={@selected_card}
-            my_hand={true}
-            game_over={not is_nil(@state.winner)}
-          />
-          <div class="flex gap-2 items-start">
-            <.render_stock
-              stock={@player.stock}
-              my_turn={my_turn}
-              selected_card={@selected_card}
-              game_over={not is_nil(@state.winner)}
-            />
-            <.render_discards
-              discards={@player.discards}
-              expanded_stack={@expanded_stack}
-              player_id={@player_id}
-              selected_card={@selected_card}
-              game_over={not is_nil(@state.winner)}
-            />
-          </div>
-        </main>
-
-        <%!-- Mobile opponent tray --%>
-        <div class="fixed bottom-0 left-0 right-0 z-50">
-          <button
-            class="w-full bg-slate-800 text-white text-sm py-2 flex items-center justify-center gap-1"
-            phx-click="toggle_tray"
-          >
-            <span>Opponents ({length(@other_players)})</span>
-            <span class={["transition-transform", @tray_open && "rotate-180"]}>&#9650;</span>
-          </button>
-          <div class={[
-            "bg-white overflow-y-auto transition-all duration-200 ease-in-out",
-            if(@tray_open, do: "max-h-[50vh] h-auto", else: "h-0")
-          ]}>
-            <div class="flex flex-col gap-6 p-4 items-center">
-              <.render_player
-                :for={{id, player} <- @other_players}
-                state={@state}
-                id={id}
-                player={player}
-                player_id={@player_id}
-                selected_card={@selected_card}
-                expanded_stack={@expanded_stack}
-                vertical
-              />
             </div>
           </div>
-        </div>
+        <% end %>
       <% end %>
     </Layouts.app>
     """
@@ -803,6 +824,17 @@ defmodule SkipboiWeb.GameLive do
      |> assign(snapshot)
      |> assign(player: player, selected_card: nil, expanded_stack: nil)
      |> compute_other_players()}
+  end
+
+  def handle_info({:notify, player_id}, socket) do
+    socket =
+      if player_id == socket.assigns.player_id do
+        push_event(socket, "notify", %{player: player_id})
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info({:reaction, player_id, emoji}, socket) do
