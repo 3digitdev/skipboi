@@ -93,8 +93,11 @@ defmodule SkipboiWeb.GameLive do
       }
     }
 
+    if connected?(socket), do: Games.subscribe("debug")
+
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        page_title: "Skipboi (Debug)",
        room_id: "debug",
        state: state,
@@ -102,8 +105,15 @@ defmodule SkipboiWeb.GameLive do
        player_id: "DebugAlice",
        player: player1,
        expanded_stack: nil,
-       selected_card: nil
-     )}
+       selected_card: nil,
+       tray_open: false,
+       mobile:
+         if(connected?(socket),
+           do: (get_connect_params(socket)["viewport_width"] || 1024) < 768,
+           else: false
+         )
+     )
+     |> compute_other_players()}
   end
 
   # ============================================================
@@ -114,25 +124,36 @@ defmodule SkipboiWeb.GameLive do
     case Games.get(id) do
       {:ok, snapshot} ->
         socket =
-          assign(
-            socket,
+          socket
+          |> assign(
             Map.merge(snapshot, %{
               page_title: "Skipboi",
               room_id: id,
               player_id: nil,
               player: nil,
               expanded_stack: nil,
-              selected_card: nil
+              selected_card: nil,
+              tray_open: false,
+              mobile: false
             })
           )
+          |> compute_other_players()
 
         if connected?(socket) do
           Games.subscribe(id)
           player_id = get_connect_params(socket)["player_id"]
+          viewport_width = get_connect_params(socket)["viewport_width"] || 1024
+          mobile = viewport_width < 768
 
           if player_id && snapshot.state[:players][player_id] do
             {:ok,
-             assign(socket, player_id: player_id, player: snapshot.state[:players][player_id])}
+             socket
+             |> assign(
+               player_id: player_id,
+               player: snapshot.state[:players][player_id],
+               mobile: mobile
+             )
+             |> compute_other_players()}
           else
             {:ok, unavailable(socket)}
           end
@@ -145,27 +166,175 @@ defmodule SkipboiWeb.GameLive do
     end
   end
 
+  defp publish_or_apply(socket, new_state) do
+    if socket.assigns.room_id == "debug" do
+      socket
+      |> assign(
+        state: new_state,
+        player: new_state.players[socket.assigns.player_id],
+        selected_card: nil,
+        expanded_stack: nil
+      )
+      |> compute_other_players()
+    else
+      case Games.publish(socket.assigns.room_id, socket.assigns.revision, new_state) do
+        {:ok, _snapshot} ->
+          assign(socket, selected_card: nil, expanded_stack: nil)
+
+        {:error, :conflict} ->
+          put_flash(socket, :error, "Another player moved first, try again.")
+      end
+    end
+  end
+
+  defp compute_other_players(socket) do
+    assign(
+      socket,
+      :other_players,
+      socket.assigns.state.player_order
+      |> Enum.reject(&(&1 == socket.assigns.player_id))
+      |> Enum.map(&{&1, socket.assigns.state.players[&1]})
+    )
+  end
+
   @impl Phoenix.LiveView
   def render(assigns) do
-    assigns =
-      assign(
-        assigns,
-        other_players: Enum.filter(assigns.state.players, &(elem(&1, 0) != assigns.player_id))
-      )
-
     ~H"""
     <Layouts.app flash={@flash}>
-      <main class="m-4 w-full flex flex-col items-center">
-        <div class="flex justify-around gap-4 lg:justify-normal lg:gap-20 lg:ml-10 items-center mb-8">
-          <div class="flex flex-col gap-2 content-center items-center">
-            <.render_stacks state={@state} selected_card={@selected_card} />
-            <div :if={@state.winner} class="flex flex-col gap-2 items-center">
-              <h3 class="mb-0">🥇WINNER🥇</h3>
-              <h4 class="mt-0">{@state.winner}</h4>
+      <div class="bg-cyan-500 text-white text-center text-sm font-bold py-1 -mx-2 -mt-2">
+        {@state.current_player}'s turn
+      </div>
+      <div
+        id="reaction-feed"
+        phx-hook=".ReactionFeed"
+        phx-update="ignore"
+        class="fixed top-12 left-3 z-50 flex flex-col gap-1 pointer-events-none"
+      >
+      </div>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ReactionFeed">
+        export default {
+          mounted() {
+            this.handleEvent("reaction", ({player, emoji}) => {
+              const el = document.createElement("div")
+              el.style.cssText = "display:flex;align-items:center;gap:6px;background:rgba(30,41,59,0.85);color:white;font-size:14px;padding:6px 12px;border-radius:9999px;width:fit-content;backdrop-filter:blur(4px);opacity:1;transition:opacity 0.5s ease-out"
+              el.innerHTML = `<span style="font-size:20px">${emoji}</span><span style="font-weight:500">${player}</span>`
+              this.el.appendChild(el)
+              setTimeout(() => { el.style.opacity = "0" }, 2500)
+              setTimeout(() => el.remove(), 3000)
+            })
+          }
+        }
+      </script>
+      <%= if not @mobile do %>
+        <main class="flex m-4 w-full flex-col items-center">
+          <div class="flex justify-around gap-4 lg:justify-normal lg:gap-20 lg:ml-10 items-center mb-8">
+            <div class="flex flex-col gap-2 content-center items-center">
+              <%= if @state.winner do %>
+                <span class="flex flex-col items-center gap-2">
+                  <div class="flex flex-col gap-2 items-center bg-amber-500/50 p-2 mt-8 rounded-md">
+                    <h1 class="mb-0 mt-0">🥇WINNER🥇</h1>
+                    <h2 class="mb-0 mt-0">{@state.winner}</h2>
+                  </div>
+                  <.button text="Rematch!" type="button" phx-click="rematch" />
+                </span>
+              <% else %>
+                <.render_stacks state={@state} selected_card={@selected_card} />
+              <% end %>
             </div>
+            <.section text="Opponents" side="left">
+              <div class="flex flex-col gap-4">
+                <.render_player
+                  :for={{id, player} <- @other_players}
+                  state={@state}
+                  id={id}
+                  player={player}
+                  player_id={@player_id}
+                  selected_card={@selected_card}
+                  expanded_stack={@expanded_stack}
+                />
+              </div>
+            </.section>
           </div>
-          <.section text="Opponents" side="left">
-            <div class="flex flex-col gap-4">
+          <.render_player
+            state={@state}
+            id={@player_id}
+            player={@player}
+            player_id={@player_id}
+            selected_card={@selected_card}
+            expanded_stack={@expanded_stack}
+          />
+          <div class="flex gap-2 mt-4">
+            <.button
+              :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
+              type="button"
+              phx-click="react"
+              phx-value-reaction={emoji}
+              class="text-2xl cursor-pointer"
+              text={emoji}
+            />
+          </div>
+        </main>
+      <% else %>
+        <%!-- Mobile layout --%>
+        <main class="flex flex-col items-center gap-4 p-4 pb-16">
+          <%= if @state.winner do %>
+            <div class="flex flex-col gap-2 items-center bg-amber-300/50 p-2 mt-8 rounded-md">
+              <h1 class="mb-0 mt-0">🥇WINNER🥇</h1>
+              <h2 class="mb-0 mt-0">{@state.winner}</h2>
+            </div>
+            <.button text="Rematch!" type="button" phx-click="rematch" />
+          <% else %>
+            <.render_stacks state={@state} selected_card={@selected_card} />
+          <% end %>
+          <% my_turn = @state.current_player == @player_id %>
+          <.render_hand
+            hand={@player.hand}
+            my_turn={my_turn}
+            selected_card={@selected_card}
+            my_hand={true}
+            game_over={not is_nil(@state.winner)}
+          />
+          <div class="flex gap-2 items-start">
+            <.render_stock
+              stock={@player.stock}
+              my_turn={my_turn}
+              selected_card={@selected_card}
+              game_over={not is_nil(@state.winner)}
+            />
+            <.render_discards
+              discards={@player.discards}
+              expanded_stack={@expanded_stack}
+              player_id={@player_id}
+              selected_card={@selected_card}
+              game_over={not is_nil(@state.winner)}
+            />
+          </div>
+          <div class="flex gap-3">
+            <.button
+              :for={emoji <- ["👍", "😂", "😮", "😭", "👎"]}
+              type="button"
+              phx-click="react"
+              phx-value-reaction={emoji}
+              class="text-2xl cursor-pointer"
+              text={emoji}
+            />
+          </div>
+        </main>
+
+        <%!-- Mobile opponent tray --%>
+        <div class="fixed bottom-0 left-0 right-0 z-50">
+          <button
+            class="w-full bg-slate-800 text-white text-sm py-2 flex items-center justify-center gap-1"
+            phx-click="toggle_tray"
+          >
+            <span>Opponents ({length(@other_players)})</span>
+            <span class={["transition-transform", @tray_open && "rotate-180"]}>&#9650;</span>
+          </button>
+          <div class={[
+            "bg-white overflow-y-auto transition-all duration-200 ease-in-out",
+            if(@tray_open, do: "max-h-[50vh] h-auto", else: "h-0")
+          ]}>
+            <div class="flex flex-col gap-6 p-4 items-center">
               <.render_player
                 :for={{id, player} <- @other_players}
                 state={@state}
@@ -174,19 +343,12 @@ defmodule SkipboiWeb.GameLive do
                 player_id={@player_id}
                 selected_card={@selected_card}
                 expanded_stack={@expanded_stack}
+                vertical
               />
             </div>
-          </.section>
+          </div>
         </div>
-        <.render_player
-          state={@state}
-          id={@player_id}
-          player={@player}
-          player_id={@player_id}
-          selected_card={@selected_card}
-          expanded_stack={@expanded_stack}
-        />
-      </main>
+      <% end %>
     </Layouts.app>
     """
   end
@@ -197,20 +359,21 @@ defmodule SkipboiWeb.GameLive do
   attr :player_id, :string, required: true
   attr :selected_card, :boolean, default: false
   attr :expanded_stack, :boolean, default: false
+  attr :vertical, :boolean, default: false
 
   def render_player(assigns) do
     ~H"""
     <% is_me = @id == @player_id %>
-    <div class={["flex flex-col gap-2 items-center w-fit", not is_me && "[zoom:0.75]"]}>
-      <span class="font-bold">{@id}</span>
-      <div class="flex gap-2 items-start">
-        <% my_turn = is_me && @state.current_player == @player_id %>
-        <.render_stock
-          stock={@player.stock}
-          my_turn={my_turn}
-          selected_card={is_me && @selected_card}
-          game_over={not is_nil(@state.winner)}
-        />
+    <% my_turn = is_me && @state.current_player == @player_id %>
+    <% is_current = @id == @state.current_player %>
+    <div class={[
+      "flex flex-col gap-2 items-center w-fit",
+      not is_me && not @vertical && "[zoom:0.75]"
+    ]}>
+      <span class={["font-bold", is_current && "text-cyan-500"]}>
+        <span :if={is_current}>👉 </span>{@id}<span :if={is_current}> 👈</span>
+      </span>
+      <%= if @vertical do %>
         <.render_hand
           hand={@player.hand}
           my_turn={my_turn}
@@ -218,14 +381,45 @@ defmodule SkipboiWeb.GameLive do
           my_hand={is_me}
           game_over={not is_nil(@state.winner)}
         />
-        <.render_discards
-          discards={@player.discards}
-          expanded_stack={@expanded_stack}
-          player_id={@id}
-          selected_card={is_me && @selected_card}
-          game_over={not is_nil(@state.winner)}
-        />
-      </div>
+        <div class="flex gap-2 items-start">
+          <.render_stock
+            stock={@player.stock}
+            my_turn={my_turn}
+            selected_card={is_me && @selected_card}
+            game_over={not is_nil(@state.winner)}
+          />
+          <.render_discards
+            discards={@player.discards}
+            expanded_stack={@expanded_stack}
+            player_id={@id}
+            selected_card={is_me && @selected_card}
+            game_over={not is_nil(@state.winner)}
+          />
+        </div>
+      <% else %>
+        <div class="flex gap-2 items-start">
+          <.render_stock
+            stock={@player.stock}
+            my_turn={my_turn}
+            selected_card={is_me && @selected_card}
+            game_over={not is_nil(@state.winner)}
+          />
+          <.render_hand
+            hand={@player.hand}
+            my_turn={my_turn}
+            selected_card={is_me && @selected_card}
+            my_hand={is_me}
+            game_over={not is_nil(@state.winner)}
+          />
+          <.render_discards
+            discards={@player.discards}
+            expanded_stack={@expanded_stack}
+            player_id={@id}
+            selected_card={is_me && @selected_card}
+            game_over={not is_nil(@state.winner)}
+          />
+        </div>
+      <% end %>
     </div>
     """
   end
@@ -289,7 +483,7 @@ defmodule SkipboiWeb.GameLive do
       )
 
     ~H"""
-    <.section text={"Stock (#{length(@stock)})"} disabled={@game_over} text_class="!text-xl">
+    <.section text={"Stock (#{length(@stock)})"} disabled={@game_over} text_class="!text-lg">
       <span class={if(length(@stock) > 1, do: "bg-slate-700 p-[1px] rounded-md #{@under_rot}")}>
         <.card_slot :if={@stock == []} />
         <.card
@@ -441,7 +635,7 @@ defmodule SkipboiWeb.GameLive do
     <div
       class={[
         @color_class,
-        "text-white w-12 h-16 rounded-md active:shadow-none flex select-none",
+        "text-white w-12 h-16 rounded-md flex select-none",
         @num_pos_class,
         @selected && not @under && "!outline-3 !outline-slate-700",
         @class
@@ -495,7 +689,6 @@ defmodule SkipboiWeb.GameLive do
 
   @impl Phoenix.LiveView
   def handle_event("click_card", %{"source" => source} = params, socket) do
-    dbg(params)
     idx = Map.get(params, "idx")
     idx = if(not is_nil(idx), do: String.to_integer(idx))
     clicked = {source, idx}
@@ -505,27 +698,19 @@ defmodule SkipboiWeb.GameLive do
     socket =
       case {source, socket.assigns.selected_card} do
         {"discard", {"hand", hand_idx}} ->
-          # Player is discarding from hand; turn is over
           player_discarded = Player.discard(socket.assigns.player, hand_idx, stack_idx)
           cur_state = socket.assigns.state
 
-          new_state = %{
-            cur_state
-            | players: Map.put(cur_state.players, socket.assigns.player_id, player_discarded)
-          }
+          new_state =
+            %{
+              cur_state
+              | players: Map.put(cur_state.players, socket.assigns.player_id, player_discarded)
+            }
+            |> Game.next_turn()
 
-          new_state = Game.next_turn(new_state)
-
-          assign(socket,
-            state: new_state,
-            player: new_state.players[socket.assigns.player_id],
-            selected_card: nil,
-            expanded_stack: nil
-          )
+          publish_or_apply(socket, new_state)
 
         {"stacks", {sel_src, sel_idx}} when sel_src != "stacks" ->
-          dbg({sel_src, sel_idx})
-          # Player is playing one of their cards on the stacks
           socket.assigns.player
           |> Player.play_card(
             socket.assigns.state,
@@ -535,19 +720,14 @@ defmodule SkipboiWeb.GameLive do
           )
           |> case do
             {:ok, {new_player, new_state}} ->
-              assign(
-                socket,
-                state: %{
-                  new_state
-                  | players: Map.put(new_state.players, socket.assigns.player_id, new_player)
-                },
-                player: new_player,
-                selected_card: nil,
-                expanded_stack: nil
-              )
+              full_state = %{
+                new_state
+                | players: Map.put(new_state.players, socket.assigns.player_id, new_player)
+              }
+
+              publish_or_apply(socket, full_state)
 
             {err, _} ->
-              dbg(err)
               put_flash(socket, :error, "Invalid play: #{err}")
           end
 
@@ -581,9 +761,54 @@ defmodule SkipboiWeb.GameLive do
     {:noreply, socket}
   end
 
+  def handle_event("toggle_tray", _, socket) do
+    {:noreply, assign(socket, tray_open: !socket.assigns.tray_open)}
+  end
+
+  def handle_event("react", %{"reaction" => emoji}, socket) do
+    Phoenix.PubSub.broadcast(
+      Skipboi.PubSub,
+      Games.topic(socket.assigns.room_id),
+      {:reaction, socket.assigns.player_id, emoji}
+    )
+
+    {:noreply, socket}
+  end
+
+  def handle_event("rematch", _, socket) do
+    player_shells =
+      socket.assigns.state.player_order
+      |> Map.new(fn id ->
+        {id, %Player{id: id, hand: [], stock: [], discards: {[], [], [], []}}}
+      end)
+
+    new_state =
+      Game.new_game()
+      |> Map.merge(%{
+        room_id: socket.assigns.state.room_id,
+        host_id: socket.assigns.state.host_id,
+        players: player_shells
+      })
+      |> Game.start()
+
+    {:noreply, publish_or_apply(socket, new_state)}
+  end
+
   @impl Phoenix.LiveView
   def handle_info({:game_state, snapshot}, socket) do
-    {:noreply, assign(socket, snapshot)}
+    player =
+      if socket.assigns.player_id,
+        do: snapshot.state.players[socket.assigns.player_id]
+
+    {:noreply,
+     socket
+     |> assign(snapshot)
+     |> assign(player: player, selected_card: nil, expanded_stack: nil)
+     |> compute_other_players()}
+  end
+
+  def handle_info({:reaction, player_id, emoji}, socket) do
+    {:noreply, push_event(socket, "reaction", %{player: player_id, emoji: emoji})}
   end
 
   def handle_info(:game_ended, socket) do

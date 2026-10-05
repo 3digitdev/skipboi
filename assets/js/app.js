@@ -31,7 +31,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const roomId = window.location.pathname.match(/\/lobby\/(.+)/)?.[1]
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken, player_id: roomId ? getPlayerId(roomId) : null},
+  params: {_csrf_token: csrfToken, player_id: roomId ? getPlayerId(roomId) : null, viewport_width: window.innerWidth},
   hooks: {...colocatedHooks, GameState, FlashToast},
 })
 

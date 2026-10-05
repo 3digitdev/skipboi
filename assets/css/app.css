@@ -13,9 +13,17 @@
 @layer base {
   html {
     font-family: var(--font-sans);
+    touch-action: manipulation;
   }
 
   button, input, textarea, select {
     font-family: inherit;
+  }
+
+  @keyframes reaction-fade {
+    0% { opacity: 0; transform: translateY(8px); }
+    8% { opacity: 1; transform: translateY(0); }
+    70% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-4px); }
   }
 }
